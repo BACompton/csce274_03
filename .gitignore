@@ -1,0 +1,7 @@
+# Compiled #
+############
+*.pyc
+
+*.docx
+*.zip
+*.log
