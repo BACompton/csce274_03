@@ -1,7 +1,10 @@
 #!/usr/bin/python
 
-import struct
+
 import math
+import struct
+import threading
+import time
 
 import serial_inf
 
@@ -93,9 +96,9 @@ class Drive:
 
 
 class Bump:
-    """ Represents the two different bumps on the IRobot Create 2. The value
-        of each bump are the corresponding bit it refers to in the bump and
-        wheel drop packet.
+    """ Represents the different bumps on the IRobot Create 2. The value
+        of physical bumps are the corresponding bit it refers to in the bump and
+        wheel drop packet while the light bumps' value refer to the packet id.
 
         This also contains the packet id, and the number of data bytes to read.
     """
@@ -104,9 +107,35 @@ class Bump:
     BUMP_L = 0x02
     BUMP_R = 0x01
 
+    # Light Bumps
+    LIGHT_BUMP_L = 46
+    LIGHT_BUMP_FL = 47
+    LIGHT_BUMP_CL = 48
+    LIGHT_BUMP_CR = 49
+    LIGHT_BUMP_FR = 50
+    LIGHT_BUMP_R = 51
+
     # Packet Information
     PACKET_ID = 7
     DATA_BYTES = 1
+    LIGHT_DATA_BYTES = 2
+
+    @staticmethod
+    def physical_bumps():
+        """ Returns a list of all the physical bumps on the Create 2
+        :return:
+            A list of all the physical bumps
+        """
+        return [Bump.BUMP_L, Bump.BUMP_R]
+
+    @staticmethod
+    def light_bumps():
+        """ Returns a list of all the light bumps on the Create 2.
+        :return:
+            A list of the light bumps
+        """
+        return [Bump.LIGHT_BUMP_L, Bump.LIGHT_BUMP_FL, Bump.LIGHT_BUMP_CL,
+                Bump.LIGHT_BUMP_CR, Bump.LIGHT_BUMP_FR, Bump.LIGHT_BUMP_R]
 
 
 class WheelDrop:
@@ -151,6 +180,225 @@ class Cliff:
                 Cliff.CLIFF_R,
                 Cliff.CLIFF_FR,
                 Cliff.VIRTUAL_WALL]
+
+# =============================================================================
+#                               PID Controller
+# =============================================================================
+
+class PIDController:
+    """
+        PIDController represents a generic discrete PID controller.
+
+        This class is to be used as a way to simplify the implementation of
+        a PID controller into a threaded program. PIDController doesnt know the meaning
+        or context of the input or output so make sure you sent the controller
+        the proper units.
+
+        Constants:
+            KP_KEY: The key used to reference the proportional gian
+            KI_KEY: The key used to reference the integral gain
+            KD_KEY: The key used to reference the derivative gain
+
+        :type _pid_lock Lock threading.Lock
+    """
+
+    # Class specific constants
+    KP_KEY = "kP"
+    KI_KEY = "kI"
+    KD_KEY = "kD"
+
+    # Controller Gains
+    _kP = 1
+    _kI = 1
+    _kD = 1
+
+    # The Goal og the PDI controller
+    _goal = 0
+
+    # Internal locking mechanism
+    _pid_lock = None
+
+    # Current Error (proportional)
+    _curr_err = 0
+    # Running Summation (integral)
+    _error_sum = 0
+    # Change in error over time (derivative)
+    _delta_error = 0
+
+    # The system time whenever the last error was added
+    _prev_error_time = 0
+
+    def __init__(self, kP, kI, kD, goal):
+        """
+            Creates a new instance of PIDController provided with a goal
+            and the individual gains
+        :param kP:
+            The proportional gain
+        :param kI:
+            The integral gain
+        :param kD:
+            The derivative gain
+        :param goal:
+            The goal for the PID controller
+        """
+        self._pid_lock = threading.Lock()
+
+        self.reset()
+        self.set_gains({
+            PIDController.KP_KEY: kP,
+            PIDController.KI_KEY: kI,
+            PIDController.KD_KEY: kD
+        })
+        self.set_goal(goal)
+
+    # -------------------------------------------------------------------- #
+    # -                     PID Controller Methods                       - #
+    # -------------------------------------------------------------------- #
+
+    def add_point(self, new_pt):
+        """
+            Adds a new point to the PID Controller.
+
+            This additoin is done by:
+                1) Calculating the error at the new point and the time
+                    difference between the new point and the current point.
+                2) Adding the error to the running summation.
+                3) Set the previous error to the current error, and then set
+                    the current error to the new point's error.
+            To get the new output of the PID Controller, call the method
+            get_output().
+        :param new_pt:
+            The new point to be added to the PID Controller.
+        """
+        self._pid_lock.acquire()                # Acquire Lock
+
+        # Calculate error
+        err = new_pt - self._goal
+
+        # Update time difference
+        curr_time = time.time()
+        delta_t = curr_time - self._prev_error_time
+        self._prev_error_time = curr_time
+
+        # Update PID Controller
+        self._error_sum = delta_t * err
+        self._delta_error = (err - self._curr_err) /delta_t
+        self._curr_err = err
+
+        self._pid_lock.release()                # Release Lock
+
+    def get_output(self, new_pt=None):
+        """
+            Calculates the output of the PID Controller at the current time.
+
+            If you need to also add a new point, use the argument new_pt.
+            For example, get_output(new_pt=50). The new point will be added
+            before the PID controller's output is calculated.
+        :param new_pt:
+            The new point that is to be added to the PID controller before
+            the output is calculated
+        :return:
+            The output of the PID controller.
+        """
+
+        if new_pt is not None:
+            self.add_point(new_pt)
+
+        self._pid_lock.acquire()                # Acquire Lock
+
+        output = self._kP * self._curr_err \
+                    + self._kI * self._error_sum \
+                    + self._kD * self._delta_error
+
+        self._pid_lock.release()                # Release Lock
+
+        return output
+
+    # -------------------------------------------------------------------- #
+    # -                        Getters/Setters                           - #
+    # -------------------------------------------------------------------- #
+
+    def reset(self):
+        """
+            Resets the PID controller to its initial state.
+
+            This means that all inputted value will be erased from the
+            PID controller's memory. This mainly results in the past error
+            being cleared.
+        """
+        self._pid_lock.acquire()                # Acquire Lock
+
+        self._error_sum = 0
+        self._delta_error = 0
+
+        self._curr_err = 0
+        self._prev_error_time = time.time()
+
+        self._pid_lock.release()                # Release Lock
+
+    def set_gains(self, k_dict={}):
+        """
+            Sets the
+        """
+        self._pid_lock.acquire()                # Acquire Lock
+
+        # Set the proportional gain
+        if PIDController.KP_KEY in k_dict:
+            self._kP = k_dict[PIDController.KP_KEY]
+
+        # Set the integral gain
+        if PIDController.KI_KEY in k_dict:
+            self._kI = k_dict[PIDController.KI_KEY]
+
+        # Set the derivative gain
+        if PIDController.KD_KEY in k_dict:
+            self._kD = k_dict[PIDController.KD_KEY]
+
+        self._pid_lock.release()                # Release Lock
+
+    def get_gains(self):
+        """
+            Returns the gains for each of the PDI controller's components.
+        :return:
+            A dictionary object with each of the components' gain.
+            A key's value specifies which gain it represents. To determine
+            what a key represents please see the constants within this class.
+        """
+        self._pid_lock.acquire()                # Acquire Lock
+
+        rtn = {
+            PIDController.KP_KEY: self._kP,
+            PIDController.KI_KEY: self._kI,
+            PIDController.KD_KEY: self._kD
+        }
+
+        self._pid_lock.release()                # Release Lock
+
+        return rtn
+
+    def set_goal(self, goal):
+        """
+            Sets the goal for the PID controller.
+        :param goal:
+            The desired goal for the PID controller
+        """
+        self._pid_lock.acquire()                # Acquire Lock
+        self._goal = goal
+        self._pid_lock.release()                # Release Lock
+
+    def get_goal(self):
+        """
+            Retrieves the goal of the PID Controller.
+        :return:
+            The value the PID Controller's goal
+        """
+        self._pid_lock.acquire()                # Acquire Lock
+        rtn = self._goal
+        self._pid_lock.release()                # Release Lock
+
+        return rtn
+
+
 
 # =============================================================================
 #                       iRobot Create 2's Interface
@@ -371,8 +619,44 @@ class Robot:
         else:
             return False
 
+    def read_light_bump(self, light_bump):
+        """ Reads the specified light bump sensor. This method is available
+            in PASSIVE, SAFE, or FULL state.
+
+            Only values from the Bump class should be passed in to this method
+            as the specified light bump value.
+
+        :param light_bump:
+            The specified light bump sensor selected from the Bump class.
+        :return:
+            The value of the specified light sensor.
+        """
+        data = self._read_packet(light_bump, Bump.LIGHT_DATA_BYTES)
+
+        if len(data) == Bump.LIGHT_DATA_BYTES:
+            return struct.unpack(">h", data)[0]
+        else:
+            return 0
+
+    def read_light_bumps(self):
+        """ Reads all the light bump sensor on the iRobot Create 2. This method
+            is available to a robot in the PASSIVE, SAFE, or FULL state.
+
+        :return:
+            A dictionary of all the light bumps' values. Each record is
+            addressed by the value in Bump. This, the individual bump values
+            can be acquired by like so:
+                light_bump_l = someRobot.read_light_bumps()[Bump.LIGHT_BUMP_L]
+        """
+        rtn = {}
+
+        for light_bump in Bump.light_bumps():
+            rtn[light_bump] = self.read_light_bump(light_bump)
+
+        return rtn
+
     def read_bumps(self):
-        """ Reads all the bumps on the iRobot Create 2. This method
+        """ Reads all the physical bumps on the iRobot Create 2. This method
             is available to a robot in the PASSIVE, SAFE, or FULL state.
 
         :return:
