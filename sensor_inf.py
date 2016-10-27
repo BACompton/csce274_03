@@ -164,6 +164,7 @@ class _SensorUpdate(threading.Thread):
 
             # Update bump and wheel drops
             self._sensor.bumps = robot.read_bumps()
+            self._sensor.light_bumps = robot.read_light_bumps()
             self._sensor.wheels = robot.read_wheel_drops()
 
             # Update cliff sensors
@@ -208,6 +209,7 @@ class Sensor:
             wheels: A dictionary of all wheel drop sensors
             cliffs: A dictionary of all cliff sensors
             encoders: A dictionary of all encoders
+            light_bumps: A dictionary of all the light bumps
 
         :type _robot robot_inf.Robot
         :type _sensor_lock _RWLock
@@ -223,6 +225,7 @@ class Sensor:
     btn_down = {}
     request_sources = {}
     bumps = {}
+    light_bumps = {}
     wheels = {}
     cliffs = {}
     encoders = {}
@@ -380,6 +383,25 @@ class Sensor:
 
         return rtn
 
+    def is_light_bump(self, light_bump):
+        """ Returns the value of the specified light bump.
+
+        :param light_bump:
+            The light bump to check
+        :return:
+            The value of the specified light bump.
+        """
+        enc_function = "LightBump"+str(light_bump)
+
+        self._sensor_lock.acquire_read()             # Acquire Lock
+
+        value = self.light_bumps[light_bump]
+        rtn = self._check_return(value, False, enc_function)
+
+        self._sensor_lock.release_read()             # Release Lock
+
+        return rtn
+
     def get_bumps(self):
         """ Gets all the bump sensor values.
 
@@ -392,6 +414,24 @@ class Sensor:
         self._sensor_lock.acquire_read()             # Acquire Lock
 
         value = self.bumps.copy()
+        rtn = self._check_return(value, {}, enc_function)
+
+        self._sensor_lock.release_read()             # Release Lock
+
+        return rtn
+
+    def get_light_bumps(self):
+        """ Gets all the bump sensor values.
+
+        :return:
+            A dictionary with each light bump sensors' value.
+            See robot_inf.Robot.read_light_bumps() for entry referencing.
+        """
+        enc_function = "LightBumps"
+
+        self._sensor_lock.acquire_read()             # Acquire Lock
+
+        value = self.light_bumps.copy()
         rtn = self._check_return(value, {}, enc_function)
 
         self._sensor_lock.release_read()             # Release Lock
