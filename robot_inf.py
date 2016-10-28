@@ -228,7 +228,7 @@ class PIDController:
     # The system time whenever the last error was added
     _prev_error_time = 0
 
-    def __init__(self, kP, kI, kD, goal):
+    def __init__(self, kP, kI, kD, goal, init_pt=0):
         """
             Creates a new instance of PIDController provided with a goal
             and the individual gains
@@ -240,16 +240,18 @@ class PIDController:
             The derivative gain
         :param goal:
             The goal for the PID controller
+        :param init_pt:
+            The initial point of the PID controller.
         """
         self._pid_lock = threading.Lock()
 
-        self.reset()
+        self.set_goal(goal)
+        self.reset(init_pt)
         self.set_gains({
             PIDController.KP_KEY: kP,
             PIDController.KI_KEY: kI,
             PIDController.KD_KEY: kD
         })
-        self.set_goal(goal)
 
     # -------------------------------------------------------------------- #
     # -                     PID Controller Methods                       - #
@@ -278,12 +280,12 @@ class PIDController:
         # Update time difference
         curr_time = time.time()
         delta_t = curr_time - self._prev_error_time
-        self._prev_error_time = curr_time
 
         # Update PID Controller
-        self._error_sum = delta_t * err
+        self._error_sum += delta_t * err
         self._delta_error = (err - self._curr_err) /delta_t
         self._curr_err = err
+        self._prev_error_time = curr_time
 
         self._pid_lock.release()                # Release Lock
 
@@ -318,20 +320,23 @@ class PIDController:
     # -                        Getters/Setters                           - #
     # -------------------------------------------------------------------- #
 
-    def reset(self):
+    def reset(self, init_pt=0):
         """
             Resets the PID controller to its initial state.
 
             This means that all inputted value will be erased from the
             PID controller's memory. This mainly results in the past error
             being cleared.
+
+            :param init_pt:
+                The initial point of the PID controller.
         """
         self._pid_lock.acquire()                # Acquire Lock
 
         self._error_sum = 0
         self._delta_error = 0
+        self._curr_err = init_pt - self._goal
 
-        self._curr_err = 0
         self._prev_error_time = time.time()
 
         self._pid_lock.release()                # Release Lock
