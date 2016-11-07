@@ -228,18 +228,19 @@ class PIDController:
     # The system time whenever the last error was added
     _prev_error_time = 0
 
-    def __init__(self, kP, kI, kD, goal, init_pt=0):
+    def __init__(self, goal=0, kP=1, kI=1, kD=1, init_pt=0):
         """
             Creates a new instance of PIDController provided with a goal
             and the individual gains
+
+        :param goal:
+            The goal for the PID controller
         :param kP:
             The proportional gain
         :param kI:
             The integral gain
         :param kD:
             The derivative gain
-        :param goal:
-            The goal for the PID controller
         :param init_pt:
             The initial point of the PID controller.
         """
@@ -293,6 +294,16 @@ class PIDController:
         """
             Calculates the output of the PID Controller at the current time.
 
+            The output of the PID controller uses the general formula for a
+            discrete-time PID controller which is as follows:
+
+            u(t) = kP * e(t)
+                    + kI * Summation(delta_t(i) * e(i))
+                    + kD * [e(t) - e(t-1)] / delta_t(t)
+
+            NOTE: The delta time is inside of the summation since new points
+                  can be added at different intervals.
+
             If you need to also add a new point, use the argument new_pt.
             For example, get_output(new_pt=50). The new point will be added
             before the PID controller's output is calculated.
@@ -319,6 +330,12 @@ class PIDController:
     # -------------------------------------------------------------------- #
     # -                        Getters/Setters                           - #
     # -------------------------------------------------------------------- #
+
+    def reset_time(self):
+        """
+            Resets the previous error time.
+        """
+        self._prev_error_time = time.time()
 
     def reset(self, init_pt=0):
         """
