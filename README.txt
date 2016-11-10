@@ -209,9 +209,6 @@ Group 3: Boyd Compton, Timothy Senn, & Jose Tadeo
         If this import fails, ensure that sensor_inf.py is in the current
         working directory. This module gives access to the following methods
         once you have instantiated a Sensor object:
-	    - Acquire read
-		(Ex: _log_sema.acquire())
-
             - Determine if a button is being pressed
                 (Ex: sensor.is_btn_pressed(robot_inf.Button.CLEAN))
 
@@ -241,9 +238,6 @@ Group 3: Boyd Compton, Timothy Senn, & Jose Tadeo
                      or sensor.get_angle(ref_angle))
                 NOTE: The reference point is just the encoders value at that
                       point in time (sensor.get_encoders()).
-
-	    - Release read
-		(Ex: _log_sema.release())
 
     Additional Help:
         For additional help, import the sensor_inf.py module and issue the
