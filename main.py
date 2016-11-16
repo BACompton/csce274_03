@@ -107,12 +107,13 @@ class WallFollow(threading.Thread):
             robot_inf.PIDController.KD_KEY: .0025
         }
         right_turn_gains = {
-            robot_inf.PIDController.KP_KEY: .2
+            robot_inf.PIDController.KP_KEY: .225
         }
         wall_follow.set_gains(follow_gains)
 
         # A counter for the number of cycles with no wall detected.
         no_wall_count = 0
+        alt_pt_gain = .5
 
         # ------------------------------------------------------------ #
         # -                    Behavior Decision                     - #
@@ -127,7 +128,7 @@ class WallFollow(threading.Thread):
             wall_pt = self._sensor.is_light_bump(robot_inf.Bump.LIGHT_BUMP_R)
 
             left_pt = self._sensor.is_light_bump(robot_inf.Bump.LIGHT_BUMP_CR)
-            alt_pt = self._sensor.is_light_bump(robot_inf.Bump.LIGHT_BUMP_CL)
+            alt_pt = alt_pt_gain * self._sensor.is_light_bump(robot_inf.Bump.LIGHT_BUMP_CL)
 
             if alt_pt > left_pt:
                 left_pt = alt_pt
@@ -167,7 +168,11 @@ class WallFollow(threading.Thread):
             # If no right wall
             if wall_pt < WallFollow._WALL_THRESHOLD:
                 wall_follow.set_gains(right_turn_gains)
-                no_wall_count += 1
+
+                # Only increment no wall count while no bumps are down
+                if not rotate_ccw or rotate_cw:
+                    no_wall_count += 1
+
                 wall_follow.reset(init_pt=wall_pt)
 
             # Found right wall
