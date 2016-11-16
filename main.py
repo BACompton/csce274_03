@@ -125,12 +125,23 @@ class WallFollow(threading.Thread):
 
             # Get the current points for the PID controllers
             wall_pt = self._sensor.is_light_bump(robot_inf.Bump.LIGHT_BUMP_R)
+
             left_pt = self._sensor.is_light_bump(robot_inf.Bump.LIGHT_BUMP_CR)
+            alt_pt = self._sensor.is_light_bump(robot_inf.Bump.LIGHT_BUMP_CL)
+
+            if alt_pt > left_pt:
+                left_pt = alt_pt
 
             # If either bump is down, set wait time to a new random
             # wait time between the limits established above. Otherwise,
             # set the wait time to the sensor's response time
             if rotate_cw or rotate_ccw:
+                # Randomly decides a direction to turn when both bump are down
+                if rotate_cw == rotate_ccw:
+                    rotate_cw = bool(random.getrandbits(1))
+                    rotate_ccw = not rotate_cw
+
+                # Generate a random wait time
                 wait_time = random.uniform(WallFollow._MIN_TURN_TIME,
                                            WallFollow._MAX_TURN_TIME)
             else:

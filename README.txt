@@ -32,7 +32,7 @@ Group 3: Boyd Compton, Timothy Senn, & Jose Tadeo
         collides with an object, it will rotate in place for a random amount 
         of time. The left bumper will cause clockwise rotation while the right 
         bumper will cause counter-clockwise rotation. When both are pressed, 
-        the robot will choose to rotate clockwise.
+        the robot will randomly choose to direction to rotate.
         
         Alternatively, if the robot is moving when the button is pressed, it
         will stop by stopping the daemon controlling the actuators in a safe
